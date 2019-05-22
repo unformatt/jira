@@ -525,6 +525,9 @@ class Issue(Resource):
         :type update: dict
 
         """
+        # UGH
+        self._session.headers['Content-Type'] = 'application/json'
+
         data = {}
         if fields is not None:
             fields_dict = fields

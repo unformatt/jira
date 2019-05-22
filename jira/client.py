@@ -3493,8 +3493,7 @@ class JIRA(object):
 
         headers = CaseInsensitiveDict(
             {'Content-Type': 'application/x-www-form-urlencoded'})
-        url = self._options['server'] + \
-            '/rest/project-templates/latest/templates'
+        url = self._options['server'] + '/rest/project-templates/latest/templates'
 
         r = self._session.post(url, data=payload, headers=headers)
 
@@ -4035,3 +4034,265 @@ class GreenHopper(JIRA):
             "GreenHopper() class is deprecated, just use JIRA() instead.", DeprecationWarning)
         JIRA.__init__(
             self, options=options, basic_auth=basic_auth, oauth=oauth, async_=async_)
+
+
+class JIRA3(JIRA):
+
+    def __init__(self, **kwargs):
+        options = kwargs['options'] = kwargs.get('options') or {}
+        options['rest_api_version'] = 3
+        if 'oauth2_token' in kwargs:
+            oauth2_token = kwargs.pop('oauth2_token')
+            options = kwargs.get('options') or {}
+            options['headers'] = options.get('headers') or {}
+            options['headers']['Authorization'] = 'Bearer %s' % oauth2_token
+        JIRA.__init__(self, **kwargs)
+
+    def projects(self, startAt=0, maxResults=False):
+        return self._fetch_pages(Board, 'values', 'project/search', startAt, maxResults, {})
+
+    def labels(self, startAt=0, maxResults=False):
+        return self._fetch_pages(Resource, 'values', 'field/AT2__labels/option', startAt, maxResults, {})
+
+    @staticmethod
+    def refresh_token(client_id, client_secret, refresh_token):
+        print('refresh_token')
+        response = requests.post(
+            'https://auth.atlassian.com/oauth/token',
+            data={
+                'grant_type': 'refresh_token',
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'refresh_token': refresh_token
+            }
+        )
+        data = response.json()
+        # print( data['access_token'] )
+        return data
+    # def fields(self, startAt=0, maxResults=False):
+    #     return self._fetch_pages(Resource, 'values', 'field', startAt, maxResults, {})
+
+    def rest_url(self, path, full=True):
+        return '%s/rest/%s/%s/%s' % (self._options['server'] if full else '', self._options['rest_path'], self._options['rest_api_version'], path)
+
+    def create_project(self, key, name, assignee=None, type="software"):
+        if assignee is None:
+            assignee = self.current_user()
+        project_types = self.get_project_types()
+        type_key = project_types[0]['key']
+        # for pt in project_types:
+        #     if pt['key'].lower() == type.lower():
+        #         type_key = pt['key']
+        #         break
+
+        payload = {
+            'name': name,
+            'key': key,
+            # 'keyEdited': 'false',
+            # 'projectTemplate': 'com.atlassian.jira-core-project-templates:jira-issuetracking',
+            # 'permissionScheme': '',
+            'lead': assignee,
+            'url': 'http://atlassian.com',
+            'projectTemplateKey': 'com.pyxis.greenhopper.jira:gh-simplified-agility-scrum',
+            'projectTypeKey': type_key,
+            # 'assigneeType': 'PROJECT_LEAD',
+        }
+
+        headers = CaseInsensitiveDict({'Content-Type': 'application/json'})
+        url = self.rest_url('project')
+
+        r = self._session.post(url, data=payload, headers=headers)
+
+        if r.status_code == 201:
+            return r.json()
+        else:
+            return False
+
+    def delete_project(self, project_id):
+        url = self.rest_url('project/%s' % project_id)
+        try:
+            #r = self._session.delete(url)
+            r = requests.delete(url, headers=self._options['headers'])
+        except JIRAError as je:
+            if '403' in str(je):
+                raise JIRAError('Not enough permissions to delete project')
+            elif '404' in str(je):
+                raise JIRAError('Project not found in Jira')
+            elif '500' in str(je):
+                # Seems like a bug in Jira. 500 error even though delete worked
+                # https://community.developer.atlassian.com/t/500-error-trying-to-delete-project/29408
+                pass
+            else:
+                raise je
+
+        if r.status_code == 204 or r.status_code == 500:
+            return True
+
+    def get_valid_project_templates(self):
+        return (
+            'com.pyxis.greenhopper.jira:gh-simplified-agility-kanban',
+            'com.pyxis.greenhopper.jira:gh-simplified-agility-scrum',
+            'com.pyxis.greenhopper.jira:gh-simplified-basic',
+            'com.pyxis.greenhopper.jira:gh-simplified-kanban-classic',
+            'com.pyxis.greenhopper.jira:gh-simplified-scrum-classic',
+            'com.atlassian.servicedesk:simplified-it-service-desk',
+            'com.atlassian.servicedesk:simplified-internal-service-desk',
+            'com.atlassian.servicedesk:simplified-external-service-desk',
+            'com.atlassian.jira-core-project-templates:jira-core-simplified-content-management',
+            'com.atlassian.jira-core-project-templates:jira-core-simplified-document-approval',
+            'com.atlassian.jira-core-project-templates:jira-core-simplified-lead-tracking',
+            'com.atlassian.jira-core-project-templates:jira-core-simplified-process-control',
+            'com.atlassian.jira-core-project-templates:jira-core-simplified-procurement',
+            'com.atlassian.jira-core-project-templates:jira-core-simplified-project-management',
+            'com.atlassian.jira-core-project-templates:jira-core-simplified-recruitment',
+            'com.atlassian.jira-core-project-templates:jira-core-simplified-task-',
+            'com.atlassian.jira.jira-incident-management-plugin:im-incident-management'
+        )
+    @lru_cache(maxsize=None)
+    def get_project_types(self):
+        '''
+        [{
+            u 'color': u '#F5A623',
+            u 'descriptionI18nKey': u 'jira.project.type.software.description',
+            u 'formattedKey': u 'Software',
+            u 'key': u 'software',
+            u 'icon': u 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pg0KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDE4LjEuMSwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPg0KPHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCINCgkgdmlld0JveD0iMCAwIDMwMCAzMDAiIHN0eWxlPSJlbmFibGUtYmFja2dyb3VuZDpuZXcgMCAwIDMwMCAzMDA7IiB4bWw6c3BhY2U9InByZXNlcnZlIj4NCjxnIGlkPSJMYXllcl8yIj4NCgk8cGF0aCBzdHlsZT0iZmlsbDojRjc5MjMyOyIgZD0iTTE1MCwwQzY2LjY2NywwLDAsNjYuNjY3LDAsMTUwczY2LjY2NywxNTAsMTUwLDE1MHMxNTAtNjYuNjY3LDE1MC0xNTBTMjMzLjMzMywwLDE1MCwweg0KCQkgTTEzNi42NjcsMTc4LjMzM0wxMjUsMTkwbC00MS42NjctNDBMOTUsMTM4LjMzM2wzMC0zMEwxMzYuNjY3LDEyMGwtMzAsMzBMMTM2LjY2NywxNzguMzMzeiBNMjA1LDE2MS42NjdsLTMwLDMwTDE2My4zMzMsMTgwDQoJCWwzMC0zMGwtMzAtMzBMMTc1LDEwOC4zMzNMMjE2LjY2NywxNTBMMjA1LDE2MS42Njd6Ii8+DQo8L2c+DQo8Zz4NCgk8cG9seWdvbiBzdHlsZT0iZmlsbDojRkZGRkZGOyIgcG9pbnRzPSIxNzUsMTkxLjY2NyAyMDUsMTYxLjY2NyAyMTYuNjY3LDE1MCAxNzUsMTA4LjMzMyAxNjMuMzMzLDEyMCAxOTMuMzMzLDE1MCAxNjMuMzMzLDE4MCAJIi8+DQoJPHBvbHlnb24gc3R5bGU9ImZpbGw6I0ZGRkZGRjsiIHBvaW50cz0iMTI1LDEwOC4zMzMgOTUsMTM4LjMzMyA4My4zMzMsMTUwIDEyNSwxOTAgMTM2LjY2NywxNzguMzMzIDEwNi42NjcsMTUwIDEzNi42NjcsMTIwIAkiLz4NCjwvZz4NCjwvc3ZnPg0K'
+        }, {
+            u 'color': u '#F5A623',
+            u 'descriptionI18nKey': u 'im.project.type.description',
+            u 'formattedKey': u 'Ops',
+            u 'key': u 'ops',
+            u 'icon': u 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyB3aWR0aD0iMTZweCIgaGVpZ2h0PSIxNnB4IiB2aWV3Qm94PSIwIDAgMTYgMTYiIHZlcnNpb249IjEuMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayI+CiAgICA8IS0tIEdlbmVyYXRvcjogU2tldGNoIDUxLjIgKDU3NTE5KSAtIGh0dHA6Ly93d3cuYm9oZW1pYW5jb2RpbmcuY29tL3NrZXRjaCAtLT4KICAgIDx0aXRsZT5QUk9KRUNUIFRZUEUgSUNPTjwvdGl0bGU+CiAgICA8ZGVzYz5DcmVhdGVkIHdpdGggU2tldGNoLjwvZGVzYz4KICAgIDxkZWZzPjwvZGVmcz4KICAgIDxnIGlkPSJQUk9KRUNULVRZUEUtSUNPTiIgc3Ryb2tlPSJub25lIiBzdHJva2Utd2lkdGg9IjEiIGZpbGw9Im5vbmUiIGZpbGwtcnVsZT0iZXZlbm9kZCI+CiAgICAgICAgPGNpcmNsZSBpZD0iT3ZhbC00IiBmaWxsPSIjRkY1NjMwIiBmaWxsLXJ1bGU9Im5vbnplcm8iIGN4PSI4IiBjeT0iOCIgcj0iOCI+PC9jaXJjbGU+CiAgICAgICAgPHBhdGggZD0iTTguODk0MDk4OTEsNC42Nzk4MjM5MyBMMTEuMzMzNDg5NCw5LjU1MjMyNTUxIEMxMS41ODA3MzMyLDEwLjA0NjE3NjYgMTEuMzgwODE4NSwxMC42NDY5NTI4IDEwLjg4Njk2NzMsMTAuODk0MTk2NiBDMTAuNzQ3OTkyLDEwLjk2Mzc3MzggMTAuNTk0NzEyLDExIDEwLjQzOTI5MjgsMTEgTDUuNTYwNTExODEsMTEgQzUuMDA4MjI3MDYsMTEgNC41NjA1MTE4MSwxMC41NTIyODQ3IDQuNTYwNTExODEsMTAgQzQuNTYwNTExODEsOS44NDQ1ODA3OCA0LjU5NjczOCw5LjY5MTMwMDg0IDQuNjY2MzE1MjIsOS41NTIzMjU1MSBMNy4xMDU3MDU3Miw0LjY3OTgyMzkzIEM3LjM1Mjk0OTUxLDQuMTg1OTcyNzkgNy45NTM3MjU2NiwzLjk4NjA1ODAzIDguNDQ3NTc2ODEsNC4yMzMzMDE4MyBDOC42NDA3MzkwMSw0LjMzMDAwNzQgOC43OTczOTMzMyw0LjQ4NjY2MTcyIDguODk0MDk4OTEsNC42Nzk4MjM5MyBaIiBpZD0iVHJpYW5nbGUiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48L3BhdGg+CiAgICA8L2c+Cjwvc3ZnPg=='
+        }, {
+            u 'color': u '#67AB49',
+            u 'descriptionI18nKey': u 'jira.project.type.servicedesk.description',
+            u 'formattedKey': u 'Service Desk',
+            u 'key': u 'service_desk',
+            u 'icon': u 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pg0KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDE4LjEuMSwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPg0KPHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCINCgkgdmlld0JveD0iMCAwIDMwMCAzMDAiIHN0eWxlPSJlbmFibGUtYmFja2dyb3VuZDpuZXcgMCAwIDMwMCAzMDA7IiB4bWw6c3BhY2U9InByZXNlcnZlIj4NCjxnIGlkPSJMYXllcl8yIj4NCgk8Zz4NCgkJPHJlY3QgeD0iMTAwIiB5PSIxMDAiIHN0eWxlPSJmaWxsOiM2N0FCNDk7IiB3aWR0aD0iMTAwIiBoZWlnaHQ9IjY2LjY2NyIvPg0KCQk8cGF0aCBzdHlsZT0iZmlsbDojNjdBQjQ5OyIgZD0iTTE1MCwwQzY2LjY2NywwLDAsNjYuNjY3LDAsMTUwczY2LjY2NywxNTAsMTUwLDE1MHMxNTAtNjYuNjY3LDE1MC0xNTBTMjMzLjMzMywwLDE1MCwweg0KCQkJIE0yMTYuNjY3LDEwMHY2Ni42Njd2MTYuNjY3aC01MFYyMDBIMjAwdjE2LjY2N0gxMDBWMjAwaDMzLjMzM3YtMTYuNjY3aC01MHYtMTYuNjY3VjEwMFY4My4zMzNoMTMzLjMzM1YxMDB6Ii8+DQoJPC9nPg0KPC9nPg0KPHBhdGggc3R5bGU9ImZpbGw6I0ZGRkZGRjsiIGQ9Ik0yMTYuNjY3LDE4My4zMzN2LTE2LjY2N1YxMDBWODMuMzMzSDgzLjMzM1YxMDB2NjYuNjY3djE2LjY2N2g1MFYyMDBIMTAwdjE2LjY2N2gxMDBWMjAwaC0zMy4zMzMNCgl2LTE2LjY2N0gyMTYuNjY3eiBNMTAwLDE2Ni42NjdWMTAwaDEwMHY2Ni42NjdIMTAweiIvPg0KPC9zdmc+DQo='
+        }, {
+            u 'color': u '#1D8832',
+            u 'descriptionI18nKey': u 'jira.project.type.business.description',
+            u 'formattedKey': u 'Business',
+            u 'key': u 'business',
+            u 'icon': u 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pg0KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDE4LjEuMSwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPg0KPHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCINCgkgdmlld0JveD0iMCAwIDMwMCAzMDAiIHN0eWxlPSJlbmFibGUtYmFja2dyb3VuZDpuZXcgMCAwIDMwMCAzMDA7IiB4bWw6c3BhY2U9InByZXNlcnZlIj4NCjxnIGlkPSJMYXllcl8yIj4NCgk8cGF0aCBzdHlsZT0iZmlsbDojMzU3MkIwOyIgZD0iTTE1MCwwQzY2LjY2NywwLDAsNjYuNjY3LDAsMTUwczY2LjY2NywxNTAsMTUwLDE1MHMxNTAtNjYuNjY3LDE1MC0xNTBTMjMzLjMzMywwLDE1MCwweg0KCQkgTTE2Ni42NjcsMjE2LjY2N0g4My4zMzNWMjAwaDgzLjMzM1YyMTYuNjY3eiBNMjE2LjY2NywxODMuMzMzSDgzLjMzM3YtMTYuNjY3aDEzMy4zMzNWMTgzLjMzM3ogTTIxNi42NjcsMTUwSDgzLjMzM3YtMTYuNjY3DQoJCWgxMzMuMzMzVjE1MHogTTIxNi42NjcsMTE2LjY2N0g4My4zMzNWMTAwaDEzMy4zMzNWMTE2LjY2N3oiLz4NCjwvZz4NCjxyZWN0IHg9IjgzLjMzMyIgeT0iMjAwIiBzdHlsZT0iZmlsbDojRkZGRkZGOyIgd2lkdGg9IjgzLjMzMyIgaGVpZ2h0PSIxNi42NjciLz4NCjxyZWN0IHg9IjgzLjMzMyIgeT0iMTY2LjY2NyIgc3R5bGU9ImZpbGw6I0ZGRkZGRjsiIHdpZHRoPSIxMzMuMzMzIiBoZWlnaHQ9IjE2LjY2NyIvPg0KPHJlY3QgeD0iODMuMzMzIiB5PSIxMzMuMzMzIiBzdHlsZT0iZmlsbDojRkZGRkZGOyIgd2lkdGg9IjEzMy4zMzMiIGhlaWdodD0iMTYuNjY3Ii8+DQo8cmVjdCB4PSI4My4zMzMiIHk9IjEwMCIgc3R5bGU9ImZpbGw6I0ZGRkZGRjsiIHdpZHRoPSIxMzMuMzMzIiBoZWlnaHQ9IjE2LjY2NyIvPg0KPC9zdmc+DQo='
+        }]'''
+        url = self.rest_url('project/type')
+        r = self._session.get(url)
+        return json_loads(r)
+
+    @lru_cache()
+    def current_user(self):
+        r, headers = self.api_get('project')
+        if 'x-ausername' in headers:
+            return headers['x-ausername']
+        elif 'x-aaccountid' in headers:
+            user = self.user(account_id=headers['x-aaccountid'])
+            return user.name
+        else:
+            return None
+
+    # def user(self, username=None, account_id=None, expand=None):
+    #     """Get a user Resource from the server.
+
+    #     :param username: username of the user to get
+    #     :param username: str
+    #     :param account_id: account_id of the user to get
+    #     :param account_id: str
+    #     :param expand: Extra information to fetch inside each resource
+    #     :type expand: Optional[Any]
+
+    #     :rtype: User
+    #     """
+    #     assert username or account_id, 'Need either username or account_id'
+    #     print
+    #     # api_get('user'
+    #     user = User(self._options, self._session)
+    #     params = {}
+
+    #     if expand is not None:
+    #         params['expand'] = expand
+
+    #     if account_id:
+    #         user.find_by_account_id(account_id, params=params)
+    #     else:
+    #         user.find(username, params=params)
+
+    #     return user
+
+    def api_get(self, url, return_headers=True):
+        if '://' not in url:
+            url = self.rest_url(url)
+
+        r = requests.get(url, headers=self._options['headers'])
+        if return_headers:
+            return r.json(), r.headers
+        return r.json()
+
+    def create_issue(self, fields=None, prefetch=True, **fieldargs):
+        data = _field_worker(fields, **fieldargs)
+
+        if 'assignee' in data['fields'] and data['fields']['assignee'] and not isinstance(data['fields']['assignee'], dict):
+            data['fields']['assignee'] = dict(name=data['fields']['assignee'])
+
+        if 'description' in data['fields'] and data['fields']['description']:
+            data['fields']['description'] = self._fix_description(data['fields']['description'])
+
+        if isinstance(data['fields']['project'], string_types) or isinstance(data['fields']['project'], integer_types):
+            data['fields']['project'] = {'id': data['fields']['project']} #self.project(p).id}
+
+        issue_type = data['fields']['issuetype']
+        if isinstance(issue_type, integer_types):
+            data['fields']['issuetype'] = {'id': issue_type}
+
+        elif isinstance(issue_type, string_types):
+            data['fields']['issuetype'] = {'id': self.issue_type_by_name(issue_type).id}
+
+        url = self.rest_url('issue')
+        print ("data:",data)
+        r = self._session.post(url, data=json.dumps(data), headers={'Content-Type': 'application/json'})
+
+        raw_issue_json = json_loads(r)
+        if 'key' not in raw_issue_json:
+            raise JIRAError(r.status_code, response=r, url=url, text=json.dumps(data))
+        if prefetch:
+            return self.issue(raw_issue_json['key'])
+        else:
+            return Issue(self._options, self._session, raw=raw_issue_json)
+
+    def update_issue(self, issue_resource, data):
+        if 'description' in data:
+            data['description'] = self._fix_description(data['description'])
+        return issue_resource.update(data)
+
+    def _fix_description(self, desc):
+        if not isinstance(desc, dict):
+            return {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "text": desc or '',
+                      "type": "text"
+                    }
+                  ]
+                }
+              ]
+            }
+        return desc
+#             {
+#     "fields": {
+#         "project": {
+#             "id": "11357"
+#         },
+#         "assignee": "admin",
+#         "description": "non",
+#         "issuetype": {
+#             "name": "Story"
+#         },
+#         "labels": [],
+#         "summary": "test ticket"
+#     }
+# }

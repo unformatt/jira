@@ -10,6 +10,7 @@ version_info = _v.version_tuple()
 from jira.client import Comment  # noqa: E402
 from jira.client import Issue  # noqa: E402
 from jira.client import JIRA  # noqa: E402
+from jira.client import JIRA3  # noqa: E402
 from jira.client import Priority  # noqa: E402
 from jira.client import Project  # noqa: E402
 from jira.client import Role  # noqa: E402
@@ -24,6 +25,7 @@ __all__ = (
     '__version__',
     'Issue',
     'JIRA',
+    'JIRA3',
     'JIRAError',
     'Priority',
     'Project',

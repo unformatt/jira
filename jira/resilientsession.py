@@ -104,18 +104,48 @@ class ResilientSession(Session):
         time.sleep(delay)
         return True
 
-    def __verb(self, verb, url, retry_data=None, **kwargs):
+    def debug_requests(self):
+        # These two lines enable debugging at httplib level (requests->urllib3->http.client)
+        # You will see the REQUEST, including HEADERS and DATA, and RESPONSE with HEADERS but without DATA.
+        # The only thing missing will be the response.body which is not logged.
+        try:
+            import http.client as http_client
+        except ImportError:
+            # Python 2
+            import httplib as http_client
+        http_client.HTTPConnection.debuglevel = 1
 
+        # You must initialize logging, otherwise you'll not see debug output.
+        logging.basicConfig()
+        logging.getLogger().setLevel(logging.DEBUG)
+        requests_log = logging.getLogger("requests.packages.urllib3")
+        requests_log.setLevel(logging.DEBUG)
+        requests_log.propagate = True
+
+    def __verb(self, verb, url, retry_data=None, **kwargs):
         d = self.headers.copy()
         d.update(kwargs.get('headers', {}))
         kwargs['headers'] = d
 
+        import logging
+
+        # self.debug_requests()
+
         # if we pass a dictionary as the 'data' we assume we want to send json
-        # data
         data = kwargs.get('data', {})
         if isinstance(data, dict):
-            data = json.dumps(data)
+            kwargs['data'] = json.dumps(data)
 
+        # DEBUG
+        # headers_copy = dict(**kwargs['headers'])
+        # if 'Authorization' in headers_copy:
+        #     headers_copy['Authorization'] = '[hidden]'
+        # print verb, url
+        # print '   headers:', headers_copy
+        # print '   data:', data
+
+        if verb.lower() == 'delete':
+            kwargs['headers']['Accept'] = None
         retry_number = 0
         while retry_number <= self.max_retries:
             response = None
@@ -123,7 +153,8 @@ class ResilientSession(Session):
             try:
                 method = getattr(super(ResilientSession, self), verb.lower())
                 response = method(url, timeout=self.timeout, **kwargs)
-                if response.status_code == 200:
+                if response.status_code >= 200 and response.status_code < 300:
+                    # print '  `--', response.json()
                     return response
             except ConnectionError as e:
                 logging.warning(
