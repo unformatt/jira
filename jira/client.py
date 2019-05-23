@@ -368,6 +368,7 @@ class JIRA(object):
                  kerberos_options=None,
                  validate=False,
                  get_server_info=True,
+                 get_fields=True,
                  async_=False,
                  async_workers=5,
                  logging=True,
@@ -538,10 +539,11 @@ class JIRA(object):
             JIRA.checked_version = True
 
         self._fields = {}
-        for f in self.fields():
-            if 'clauseNames' in f:
-                for name in f['clauseNames']:
-                    self._fields[name] = f['id']
+        if get_fields:
+            for f in self.fields():
+                if 'clauseNames' in f:
+                    for name in f['clauseNames']:
+                        self._fields[name] = f['id']
 
     def _create_cookie_auth(self, auth, timeout):
         self._session = ResilientSession(timeout=timeout)
@@ -4039,10 +4041,14 @@ class GreenHopper(JIRA):
 class JIRA3(JIRA):
 
     def __init__(self, **kwargs):
+        kwargs['get_server_info'] = False
+        kwargs['get_fields'] = False
         options = kwargs['options'] = kwargs.get('options') or {}
+        options['rest_api_version'] = 3
         options['rest_api_version'] = 3
         if 'oauth2_token' in kwargs:
             oauth2_token = kwargs.pop('oauth2_token')
+            self._oauth2_token = oauth2_token
             options = kwargs.get('options') or {}
             options['headers'] = options.get('headers') or {}
             options['headers']['Authorization'] = 'Bearer %s' % oauth2_token
@@ -4234,7 +4240,7 @@ class JIRA3(JIRA):
         if 'assignee' in data['fields'] and data['fields']['assignee'] and not isinstance(data['fields']['assignee'], dict):
             data['fields']['assignee'] = dict(name=data['fields']['assignee'])
 
-        if 'description' in data['fields'] and data['fields']['description']:
+        if 'description' in data['fields']:
             data['fields']['description'] = self._fix_description(data['fields']['description'])
 
         if isinstance(data['fields']['project'], string_types) or isinstance(data['fields']['project'], integer_types):
@@ -4282,17 +4288,14 @@ class JIRA3(JIRA):
               ]
             }
         return desc
-#             {
-#     "fields": {
-#         "project": {
-#             "id": "11357"
-#         },
-#         "assignee": "admin",
-#         "description": "non",
-#         "issuetype": {
-#             "name": "Story"
-#         },
-#         "labels": [],
-#         "summary": "test ticket"
-#     }
-# }
+
+    def get_jira_instance_info(self):
+        # PROBLEM: If user grants access to more than one site. We're just looking at the first one!
+        return self.get_accessible_resources()[0]
+
+    @lru_cache()
+    def get_accessible_resources(self):
+        headers = {'Authorization': 'Bearer %s' % self._oauth2_token}
+        data = requests.get('https://api.atlassian.com/oauth/token/accessible-resources', headers=headers).json()
+        # print( "data:", data)
+        return data
