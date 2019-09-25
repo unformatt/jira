@@ -4270,6 +4270,24 @@ class JIRA3(JIRA):
             data['description'] = self._fix_description(data['description'])
         return issue_resource.update(data)
 
+    def transition_issue(self, issue_resource, transitionId):
+        """Perform a transition on an issue.
+        :param issue: ID or key of the issue to perform the transition on
+        :param transition: ID of the transition to perform
+        """
+        issue_resource = getattr(issue_resource, 'raw', issue_resource)
+
+        data = {'transition': {'id': int(transitionId)}}
+        url = self.rest_url('issue/%s/transitions' % issue_resource['id'])
+        r = self._session.post(
+            url, data=json.dumps(data), headers={'Content-Type': 'application/json'})
+        try:
+            r_json = json_loads(r)
+        except ValueError as e:
+            logging.error("%s\n%s" % (e, r.text))
+            raise e
+        return r_json
+
     def _fix_description(self, desc):
         if not isinstance(desc, dict):
             return {
