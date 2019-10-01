@@ -4187,13 +4187,26 @@ class JIRA3(JIRA):
         return json_loads(r)
 
     @lru_cache()
-    def current_user(self):
+    def response_headers_for_user_info(self):
         r, headers = self.api_get('project')
+        return headers
+
+    @lru_cache()
+    def current_user(self):
+        headers = self.response_headers_for_user_info()
         if 'x-ausername' in headers:
             return headers['x-ausername']
         elif 'x-aaccountid' in headers:
             user = self.user(account_id=headers['x-aaccountid'])
             return user.name
+        else:
+            return None
+
+    @lru_cache()
+    def get_current_account_id(self):
+        headers = self.response_headers_for_user_info()
+        if 'x-aaccountid' in headers:
+            return headers['x-aaccountid']
         else:
             return None
 
