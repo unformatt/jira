@@ -4045,7 +4045,6 @@ class JIRA3(JIRA):
         kwargs['get_fields'] = False
         options = kwargs['options'] = kwargs.get('options') or {}
         options['rest_api_version'] = 3
-        options['rest_api_version'] = 3
         if 'oauth2_token' in kwargs:
             oauth2_token = kwargs.pop('oauth2_token')
             self._oauth2_token = oauth2_token
@@ -4062,7 +4061,6 @@ class JIRA3(JIRA):
 
     @staticmethod
     def refresh_token(client_id, client_secret, refresh_token):
-        print('refresh_token')
         response = requests.post(
             'https://auth.atlassian.com/oauth/token',
             data={
@@ -4246,6 +4244,26 @@ class JIRA3(JIRA):
         if return_headers:
             return r.json(), r.headers
         return r.json()
+
+    def report_account(self, account_id, updated_at):
+        data = dict(accounts=[dict(accountId=account_id, updatedAt=updated_at)])
+        # Test accounts
+        # data['accounts'].extend([{
+        #         'accountId': '5be24ad8b1653240376955d2',
+        #         'updatedAt': '2019-10-01T23:08:51.382Z',
+        #     },
+        #     {
+        #         'accountId': '5be24ba3f91c106033269289',
+        #         'updatedAt': '2019-10-01T23:08:51.382Z',
+        #     }])
+        r = requests.post(
+            'https://api.atlassian.com/app/report-accounts/',
+            headers=self._options['headers'],
+            json=data)
+        if r.text:
+            return r.json()
+        else:
+            return []
 
     def create_issue(self, fields=None, prefetch=True, **fieldargs):
         data = _field_worker(fields, **fieldargs)
