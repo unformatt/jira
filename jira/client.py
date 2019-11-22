@@ -4285,7 +4285,6 @@ class JIRA3(JIRA):
             data['fields']['issuetype'] = {'id': self.issue_type_by_name(issue_type).id}
 
         url = self.rest_url('issue')
-        print ("data:",data)
         r = self._session.post(url, data=json.dumps(data), headers={'Content-Type': 'application/json'})
 
         raw_issue_json = json_loads(r)
