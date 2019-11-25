@@ -4079,16 +4079,27 @@ class JIRA3(JIRA):
     def rest_url(self, path, full=True):
         return '%s/rest/%s/%s/%s' % (self._options['server'] if full else '', self._options['rest_path'], self._options['rest_api_version'], path)
 
-    def create_project(self, key, name, assignee=None, type="software"):
+    def project_issue_types(self, project_id):
+        types = self._session.get(self.rest_url('project/%s' % project_id)).json()['issueTypes']
+        return types
+
+    def create_project(self, key, name, assignee=None, type_key='software', template_key=None):
+        type_templates = dict(
+            business=['com.atlassian.jira-core-project-templates:jira-core-simplified-content-management', 'com.atlassian.jira-core-project-templates:jira-core-simplified-document-approval', 'com.atlassian.jira-core-project-templates:jira-core-simplified-lead-tracking', 'com.atlassian.jira-core-project-templates:jira-core-simplified-process-control', 'com.atlassian.jira-core-project-templates:jira-core-simplified-procurement', 'com.atlassian.jira-core-project-templates:jira-core-simplified-project-management', 'com.atlassian.jira-core-project-templates:jira-core-simplified-recruitment', 'com.atlassian.jira-core-project-templates:jira-core-simplified-task-tracking'],
+            service_desk=['com.atlassian.servicedesk:simplified-internal-service-desk', 'com.atlassian.servicedesk:simplified-external-service-desk', 'com.atlassian.servicedesk:simplified-it-service-desk'],
+            software=['com.pyxis.greenhopper.jira:gh-simplified-agility-scrum', 'com.pyxis.greenhopper.jira:gh-simplified-agility-kanban', 'com.pyxis.greenhopper.jira:gh-simplified-basic', 'com.pyxis.greenhopper.jira:gh-simplified-kanban-classic', 'com.pyxis.greenhopper.jira:gh-simplified-scrum-classic'],
+        )
         if assignee is None:
             assignee = self.current_user()
-        project_types = self.get_project_types()
-        type_key = project_types[0]['key']
+        # project_types = self.get_project_types()
+        # type_key = project_types[0]['key']
         # for pt in project_types:
         #     if pt['key'].lower() == type.lower():
-        #         type_key = pt['key']
+        #         type_key = pt['key'].lower()
         #         break
-
+        # print("type_key:", type_key)
+        if not template_key:
+            template_key = type_templates[type_key][0]
         payload = {
             'name': name,
             'key': key,
@@ -4097,7 +4108,7 @@ class JIRA3(JIRA):
             # 'permissionScheme': '',
             'lead': assignee,
             'url': 'http://atlassian.com',
-            'projectTemplateKey': 'com.pyxis.greenhopper.jira:gh-simplified-agility-scrum',
+            'projectTemplateKey': template_key,
             'projectTypeKey': type_key,
             # 'assigneeType': 'PROJECT_LEAD',
         }
@@ -4160,25 +4171,21 @@ class JIRA3(JIRA):
             u 'descriptionI18nKey': u 'jira.project.type.software.description',
             u 'formattedKey': u 'Software',
             u 'key': u 'software',
-            u 'icon': u 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pg0KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDE4LjEuMSwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPg0KPHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCINCgkgdmlld0JveD0iMCAwIDMwMCAzMDAiIHN0eWxlPSJlbmFibGUtYmFja2dyb3VuZDpuZXcgMCAwIDMwMCAzMDA7IiB4bWw6c3BhY2U9InByZXNlcnZlIj4NCjxnIGlkPSJMYXllcl8yIj4NCgk8cGF0aCBzdHlsZT0iZmlsbDojRjc5MjMyOyIgZD0iTTE1MCwwQzY2LjY2NywwLDAsNjYuNjY3LDAsMTUwczY2LjY2NywxNTAsMTUwLDE1MHMxNTAtNjYuNjY3LDE1MC0xNTBTMjMzLjMzMywwLDE1MCwweg0KCQkgTTEzNi42NjcsMTc4LjMzM0wxMjUsMTkwbC00MS42NjctNDBMOTUsMTM4LjMzM2wzMC0zMEwxMzYuNjY3LDEyMGwtMzAsMzBMMTM2LjY2NywxNzguMzMzeiBNMjA1LDE2MS42NjdsLTMwLDMwTDE2My4zMzMsMTgwDQoJCWwzMC0zMGwtMzAtMzBMMTc1LDEwOC4zMzNMMjE2LjY2NywxNTBMMjA1LDE2MS42Njd6Ii8+DQo8L2c+DQo8Zz4NCgk8cG9seWdvbiBzdHlsZT0iZmlsbDojRkZGRkZGOyIgcG9pbnRzPSIxNzUsMTkxLjY2NyAyMDUsMTYxLjY2NyAyMTYuNjY3LDE1MCAxNzUsMTA4LjMzMyAxNjMuMzMzLDEyMCAxOTMuMzMzLDE1MCAxNjMuMzMzLDE4MCAJIi8+DQoJPHBvbHlnb24gc3R5bGU9ImZpbGw6I0ZGRkZGRjsiIHBvaW50cz0iMTI1LDEwOC4zMzMgOTUsMTM4LjMzMyA4My4zMzMsMTUwIDEyNSwxOTAgMTM2LjY2NywxNzguMzMzIDEwNi42NjcsMTUwIDEzNi42NjcsMTIwIAkiLz4NCjwvZz4NCjwvc3ZnPg0K'
         }, {
             u 'color': u '#F5A623',
             u 'descriptionI18nKey': u 'im.project.type.description',
             u 'formattedKey': u 'Ops',
             u 'key': u 'ops',
-            u 'icon': u 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyB3aWR0aD0iMTZweCIgaGVpZ2h0PSIxNnB4IiB2aWV3Qm94PSIwIDAgMTYgMTYiIHZlcnNpb249IjEuMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayI+CiAgICA8IS0tIEdlbmVyYXRvcjogU2tldGNoIDUxLjIgKDU3NTE5KSAtIGh0dHA6Ly93d3cuYm9oZW1pYW5jb2RpbmcuY29tL3NrZXRjaCAtLT4KICAgIDx0aXRsZT5QUk9KRUNUIFRZUEUgSUNPTjwvdGl0bGU+CiAgICA8ZGVzYz5DcmVhdGVkIHdpdGggU2tldGNoLjwvZGVzYz4KICAgIDxkZWZzPjwvZGVmcz4KICAgIDxnIGlkPSJQUk9KRUNULVRZUEUtSUNPTiIgc3Ryb2tlPSJub25lIiBzdHJva2Utd2lkdGg9IjEiIGZpbGw9Im5vbmUiIGZpbGwtcnVsZT0iZXZlbm9kZCI+CiAgICAgICAgPGNpcmNsZSBpZD0iT3ZhbC00IiBmaWxsPSIjRkY1NjMwIiBmaWxsLXJ1bGU9Im5vbnplcm8iIGN4PSI4IiBjeT0iOCIgcj0iOCI+PC9jaXJjbGU+CiAgICAgICAgPHBhdGggZD0iTTguODk0MDk4OTEsNC42Nzk4MjM5MyBMMTEuMzMzNDg5NCw5LjU1MjMyNTUxIEMxMS41ODA3MzMyLDEwLjA0NjE3NjYgMTEuMzgwODE4NSwxMC42NDY5NTI4IDEwLjg4Njk2NzMsMTAuODk0MTk2NiBDMTAuNzQ3OTkyLDEwLjk2Mzc3MzggMTAuNTk0NzEyLDExIDEwLjQzOTI5MjgsMTEgTDUuNTYwNTExODEsMTEgQzUuMDA4MjI3MDYsMTEgNC41NjA1MTE4MSwxMC41NTIyODQ3IDQuNTYwNTExODEsMTAgQzQuNTYwNTExODEsOS44NDQ1ODA3OCA0LjU5NjczOCw5LjY5MTMwMDg0IDQuNjY2MzE1MjIsOS41NTIzMjU1MSBMNy4xMDU3MDU3Miw0LjY3OTgyMzkzIEM3LjM1Mjk0OTUxLDQuMTg1OTcyNzkgNy45NTM3MjU2NiwzLjk4NjA1ODAzIDguNDQ3NTc2ODEsNC4yMzMzMDE4MyBDOC42NDA3MzkwMSw0LjMzMDAwNzQgOC43OTczOTMzMyw0LjQ4NjY2MTcyIDguODk0MDk4OTEsNC42Nzk4MjM5MyBaIiBpZD0iVHJpYW5nbGUiIHN0cm9rZT0iI0ZGRkZGRiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48L3BhdGg+CiAgICA8L2c+Cjwvc3ZnPg=='
         }, {
             u 'color': u '#67AB49',
             u 'descriptionI18nKey': u 'jira.project.type.servicedesk.description',
             u 'formattedKey': u 'Service Desk',
             u 'key': u 'service_desk',
-            u 'icon': u 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pg0KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDE4LjEuMSwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPg0KPHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCINCgkgdmlld0JveD0iMCAwIDMwMCAzMDAiIHN0eWxlPSJlbmFibGUtYmFja2dyb3VuZDpuZXcgMCAwIDMwMCAzMDA7IiB4bWw6c3BhY2U9InByZXNlcnZlIj4NCjxnIGlkPSJMYXllcl8yIj4NCgk8Zz4NCgkJPHJlY3QgeD0iMTAwIiB5PSIxMDAiIHN0eWxlPSJmaWxsOiM2N0FCNDk7IiB3aWR0aD0iMTAwIiBoZWlnaHQ9IjY2LjY2NyIvPg0KCQk8cGF0aCBzdHlsZT0iZmlsbDojNjdBQjQ5OyIgZD0iTTE1MCwwQzY2LjY2NywwLDAsNjYuNjY3LDAsMTUwczY2LjY2NywxNTAsMTUwLDE1MHMxNTAtNjYuNjY3LDE1MC0xNTBTMjMzLjMzMywwLDE1MCwweg0KCQkJIE0yMTYuNjY3LDEwMHY2Ni42Njd2MTYuNjY3aC01MFYyMDBIMjAwdjE2LjY2N0gxMDBWMjAwaDMzLjMzM3YtMTYuNjY3aC01MHYtMTYuNjY3VjEwMFY4My4zMzNoMTMzLjMzM1YxMDB6Ii8+DQoJPC9nPg0KPC9nPg0KPHBhdGggc3R5bGU9ImZpbGw6I0ZGRkZGRjsiIGQ9Ik0yMTYuNjY3LDE4My4zMzN2LTE2LjY2N1YxMDBWODMuMzMzSDgzLjMzM1YxMDB2NjYuNjY3djE2LjY2N2g1MFYyMDBIMTAwdjE2LjY2N2gxMDBWMjAwaC0zMy4zMzMNCgl2LTE2LjY2N0gyMTYuNjY3eiBNMTAwLDE2Ni42NjdWMTAwaDEwMHY2Ni42NjdIMTAweiIvPg0KPC9zdmc+DQo='
         }, {
             u 'color': u '#1D8832',
             u 'descriptionI18nKey': u 'jira.project.type.business.description',
             u 'formattedKey': u 'Business',
             u 'key': u 'business',
-            u 'icon': u 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iaXNvLTg4NTktMSI/Pg0KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDE4LjEuMSwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPg0KPHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4PSIwcHgiIHk9IjBweCINCgkgdmlld0JveD0iMCAwIDMwMCAzMDAiIHN0eWxlPSJlbmFibGUtYmFja2dyb3VuZDpuZXcgMCAwIDMwMCAzMDA7IiB4bWw6c3BhY2U9InByZXNlcnZlIj4NCjxnIGlkPSJMYXllcl8yIj4NCgk8cGF0aCBzdHlsZT0iZmlsbDojMzU3MkIwOyIgZD0iTTE1MCwwQzY2LjY2NywwLDAsNjYuNjY3LDAsMTUwczY2LjY2NywxNTAsMTUwLDE1MHMxNTAtNjYuNjY3LDE1MC0xNTBTMjMzLjMzMywwLDE1MCwweg0KCQkgTTE2Ni42NjcsMjE2LjY2N0g4My4zMzNWMjAwaDgzLjMzM1YyMTYuNjY3eiBNMjE2LjY2NywxODMuMzMzSDgzLjMzM3YtMTYuNjY3aDEzMy4zMzNWMTgzLjMzM3ogTTIxNi42NjcsMTUwSDgzLjMzM3YtMTYuNjY3DQoJCWgxMzMuMzMzVjE1MHogTTIxNi42NjcsMTE2LjY2N0g4My4zMzNWMTAwaDEzMy4zMzNWMTE2LjY2N3oiLz4NCjwvZz4NCjxyZWN0IHg9IjgzLjMzMyIgeT0iMjAwIiBzdHlsZT0iZmlsbDojRkZGRkZGOyIgd2lkdGg9IjgzLjMzMyIgaGVpZ2h0PSIxNi42NjciLz4NCjxyZWN0IHg9IjgzLjMzMyIgeT0iMTY2LjY2NyIgc3R5bGU9ImZpbGw6I0ZGRkZGRjsiIHdpZHRoPSIxMzMuMzMzIiBoZWlnaHQ9IjE2LjY2NyIvPg0KPHJlY3QgeD0iODMuMzMzIiB5PSIxMzMuMzMzIiBzdHlsZT0iZmlsbDojRkZGRkZGOyIgd2lkdGg9IjEzMy4zMzMiIGhlaWdodD0iMTYuNjY3Ii8+DQo8cmVjdCB4PSI4My4zMzMiIHk9IjEwMCIgc3R5bGU9ImZpbGw6I0ZGRkZGRjsiIHdpZHRoPSIxMzMuMzMzIiBoZWlnaHQ9IjE2LjY2NyIvPg0KPC9zdmc+DQo='
         }]'''
         url = self.rest_url('project/type')
         r = self._session.get(url)
