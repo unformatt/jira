@@ -4040,6 +4040,10 @@ class GreenHopper(JIRA):
 
 class JIRA3(JIRA):
 
+    """
+    https://developer.atlassian.com/cloud/jira/platform/rest/v3/
+    """
+
     def __init__(self, **kwargs):
         kwargs['get_server_info'] = False
         kwargs['get_fields'] = False
@@ -4328,15 +4332,15 @@ class JIRA3(JIRA):
     def _fix_description(self, desc):
         if not isinstance(desc, dict):
             return {
-                "type": "doc",
-                "version": 1,
-                "content": [
+                'type': 'doc',
+                'version': 1,
+                'content': [
                 {
-                  "type": "paragraph",
-                  "content": [
+                  'type': 'paragraph',
+                  'content': [
                     {
-                      "text": desc or '',
-                      "type": "text"
+                      'text': desc or '',
+                      'type': 'text'
                     }
                   ]
                 }
@@ -4354,3 +4358,31 @@ class JIRA3(JIRA):
         data = requests.get('https://api.atlassian.com/oauth/token/accessible-resources', headers=headers).json()
         # print( "data:", data)
         return data
+
+    @translate_resource_args
+    def add_comment(self, issue, body, visibility=None, is_internal=False):
+        data = {'body': body}
+
+        if is_internal:
+            data.update({
+                'properties': [
+                    {'key': 'sd.public.comment',
+                     'value': {'internal': is_internal}}
+                ]
+            })
+
+        if visibility is not None:
+            data['visibility'] = visibility
+
+        url = self._get_url('issue/' + str(issue) + '/comment')
+        # print ('>>>', url)
+        # print('---comment body---')
+        # print(json.dumps(data, indent=2))
+        # print('---/comment body---')
+        # import pdb; pdb.set_trace()
+        r = self._session.post(
+            url, data=json.dumps(data), headers={'Content-Type': 'application/json'}
+        )
+
+        comment = Comment(self._options, self._session, raw=json_loads(r))
+        return comment
