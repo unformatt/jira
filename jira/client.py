@@ -4276,6 +4276,21 @@ class JIRA3(JIRA):
         else:
             return []
 
+    @lru_cache(maxsize=50)
+    def get_project_fields_by_issue_type(self, project_id):
+        print('getting fields for project_id', project_id)
+        url = self.rest_url('issue/createmeta?expand=projects.issuetypes.fields')
+        projects = self._session.get(url).json()['projects']
+        for project in projects:
+            if str(project['id']) == str(project_id):
+                issue_types = {}
+                for itype in project['issuetypes']:
+                    name = itype['name']
+                    issue_types[name] = itype['fields']#.keys()
+                    # 'set' in field['operations'] or 'add' in field['operations']
+                return issue_types
+        return {}
+
     def create_issue(self, fields=None, prefetch=True, **fieldargs):
         data = _field_worker(fields, **fieldargs)
 
