@@ -4147,6 +4147,9 @@ class JIRA3(JIRA):
         if r.status_code == 204 or r.status_code == 500:
             return True
 
+    def delete_board(self, board_id):
+        return self.delete_project(board_id)
+
     def get_valid_project_templates(self):
         return (
             'com.pyxis.greenhopper.jira:gh-simplified-agility-kanban',
