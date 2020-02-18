@@ -4204,7 +4204,7 @@ class JIRA3(JIRA):
         return headers
 
     @lru_cache()
-    def current_user(self):
+    def get_current_user_name(self):
         headers = self.response_headers_for_user_info()
         if 'x-ausername' in headers:
             return headers['x-ausername']
