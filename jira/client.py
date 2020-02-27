@@ -4094,7 +4094,7 @@ class JIRA3(JIRA):
             software=['com.pyxis.greenhopper.jira:gh-simplified-agility-scrum', 'com.pyxis.greenhopper.jira:gh-simplified-agility-kanban', 'com.pyxis.greenhopper.jira:gh-simplified-basic', 'com.pyxis.greenhopper.jira:gh-simplified-kanban-classic', 'com.pyxis.greenhopper.jira:gh-simplified-scrum-classic'],
         )
         if assignee is None:
-            assignee = self.current_user()
+            assignee = self.get_current_account_id()
         # project_types = self.get_project_types()
         # type_key = project_types[0]['key']
         # for pt in project_types:
@@ -4110,7 +4110,7 @@ class JIRA3(JIRA):
             # 'keyEdited': 'false',
             # 'projectTemplate': 'com.atlassian.jira-core-project-templates:jira-issuetracking',
             # 'permissionScheme': '',
-            'lead': assignee,
+            'leadAccountId': assignee,
             'url': 'http://atlassian.com',
             'projectTemplateKey': template_key,
             'projectTypeKey': type_key,
