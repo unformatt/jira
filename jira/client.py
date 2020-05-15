@@ -4281,7 +4281,6 @@ class JIRA3(JIRA):
 
     @lru_cache(maxsize=50)
     def get_project_fields_by_issue_type(self, project_id):
-        print('getting fields for project_id', project_id)
         url = self.rest_url('issue/createmeta?expand=projects.issuetypes.fields')
         projects = self._session.get(url).json()['projects']
         for project in projects:
@@ -4303,8 +4302,9 @@ class JIRA3(JIRA):
         if 'description' in data['fields']:
             data['fields']['description'] = self._fix_description(data['fields']['description'])
 
-        if isinstance(data['fields']['project'], string_types) or isinstance(data['fields']['project'], integer_types):
-            data['fields']['project'] = {'id': data['fields']['project']} #self.project(p).id}
+        project_val = data.get('fields', {}).get('project')
+        if project_val and isinstance(project_val, string_types) or isinstance(project_val, integer_types):
+            data['fields']['project'] = {'id': project_val}
 
         issue_type = data['fields']['issuetype']
         if isinstance(issue_type, integer_types):
