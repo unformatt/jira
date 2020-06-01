@@ -4421,3 +4421,29 @@ class JIRA3(JIRA):
             headers={'Content-Type': 'application/json'})
 
         return RemoteLink(self._options, self._session, raw=json_loads(r))
+
+    def get_workflows(self, expand='statuses.properties', maxResults=50):
+        startAt = 0
+        all_results = []
+        while 1:
+            # returns {"maxResults":50,"startAt":0,"total":xxx,"isLast":true,"values":[{...}]}
+            data = json_loads(self._session.get(self.rest_url('workflow/search?expand=%s&startAt=%s&maxResults=%s' %
+                (expand, startAt, maxResults))))
+            all_results.extend(data['values'])
+            startAt += len(data['values'])
+            if data['isLast'] or len(all_results) >= data['total']:
+                print(len(all_results), data['total'])
+                break
+        return all_results
+
+    def get_project_workflow_schemes(self, project_id):
+        response = json_loads(self._session.get(self.rest_url('workflowscheme/project?projectId=%s' % project_id)))
+        return response
+
+    def delete_issue(self, issue_id):
+        url = self._get_url('issue')
+        return self._session.delete('%s/%s' % (url, issue_id))
+
+    def delete_issue_comment(self, issue_id, comment_id):
+        url = self._get_url('issue')
+        return self._session.delete('%s/%s/comment/%s' % (url, issue_id, comment_id))
