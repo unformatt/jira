@@ -4279,7 +4279,6 @@ class JIRA3(JIRA):
         else:
             return []
 
-    @lru_cache(maxsize=50)
     def get_project_fields_by_issue_type(self, project_id):
         url = self.rest_url('issue/createmeta?expand=projects.issuetypes.fields')
         projects = self._session.get(url).json()['projects']
