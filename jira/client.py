@@ -4447,3 +4447,31 @@ class JIRA3(JIRA):
     def delete_issue_comment(self, issue_id, comment_id):
         url = self._get_url('issue')
         return self._session.delete('%s/%s/comment/%s' % (url, issue_id, comment_id))
+
+    def get_users(self):
+        url = self._get_url('users/search')
+        users = []
+        startAt = 0
+        PER_PAGE = 50
+        while 1:
+            results = self._session.get('%s?startAt=%s&maxResults=%s' % (url, startAt, PER_PAGE)).json()
+            users.extend(results)
+            if len(results) < PER_PAGE:
+                break
+            else:
+                startAt += PER_PAGE
+        return users
+
+    def get_project_users(self, projectKey):
+        url = self._get_url('user/assignable/multiProjectSearch')
+        users = []
+        startAt = 0
+        PER_PAGE = 50
+        while 1:
+            results = self._session.get('%s?startAt=%s&maxResults=%s&projectKeys=%s' % (url, startAt, PER_PAGE, projectKey)).json()
+            users.extend(results)
+            if len(results) < PER_PAGE:
+                break
+            else:
+                startAt += PER_PAGE
+        return users
