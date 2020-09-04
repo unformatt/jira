@@ -4367,7 +4367,9 @@ class JIRA3(JIRA):
 
     def get_jira_instance_info(self):
         # PROBLEM: If user grants access to more than one site. We're just looking at the first one!
-        return self.get_accessible_resources()[0]
+        resources = self.get_accessible_resources()
+        if resources:
+            return resources[0]
 
     @lru_cache()
     def get_accessible_resources(self):
