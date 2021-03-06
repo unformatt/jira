@@ -327,7 +327,7 @@ class JIRA(object):
     """
 
     DEFAULT_OPTIONS = {
-        "server": "http://localhost:2990/jira",
+        "server": "http://no-server-specified/jira",
         "auth_url": '/rest/auth/1/session',
         "context_path": "/",
         "rest_path": "api",
