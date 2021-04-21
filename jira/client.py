@@ -489,7 +489,6 @@ class JIRA(object):
             self._create_oauth_session(oauth, timeout)
         elif basic_auth:
             self._create_http_basic_session(*basic_auth, timeout=timeout)
-            self._session.headers.update(self._options['headers'])
         elif jwt:
             self._create_jwt_session(jwt, timeout)
         elif kerberos:
@@ -1352,6 +1351,13 @@ class JIRA(object):
                                    'error': None, 'input_fields': fields})
         return issue_list
 
+    def update_issue(self, issue_resource, data):
+        return issue_resource.update(data)
+
+    def delete_issue(self, issue_id):
+        url = self._get_url('issue')
+        return self._session.delete('%s/%s' % (url, issue_id))
+
     def supports_service_desk(self):
         """Returns whether or not the JIRA instance supports service desk.
 
@@ -2053,6 +2059,24 @@ class JIRA(object):
             self._options, self._session, raw_type_json) for raw_type_json in r_json]
         return issue_types
 
+    def project_issue_types(self, project_id):
+        types = self._get_json('project/%s' % project_id)['issueTypes']
+        return types
+
+    def get_project_fields_by_issue_type(self, project_id, project_key=None):
+        data = self._get_json('issue/createmeta?projectKeys=%s&expand=projects.issuetypes.fields' % project_key)
+        return _parse_project_fields_by_issue_type(project_id, data)
+
+    def add_web_link(self, issue, title, url, icon_url=None):
+        data = dict(object=dict(title=title, url=url))
+        if icon_url:
+            data['object']['icon'] = dict(title=title, url16x16=icon_url)
+
+        url = self._get_url('issue/' + str(issue) + '/remotelink')
+        r = self._session.post(url, data=json.dumps(data))
+
+        return RemoteLink(None, None, raw=data)
+
     def issue_type(self, id):
         """Get an issue type Resource from the server.
 
@@ -2175,6 +2199,25 @@ class JIRA(object):
         :rtype: Project
         """
         return self._find_for_resource(Project, id)
+
+    def get_project_users(self, projectKey):
+        users = []
+        for role in self.project_roles(projectKey):
+            users.extend(self.get_role_users(projectKey, role))
+        return users
+
+    def get_role_users(self, project_key, role_obj, users=None):
+        users = users or []
+        for actor in role_obj.actors:
+            if actor.type == 'atlassian-group-role-actor':
+                users.extend(self.get_role_users(project_key, self.project_role(project_key, actor.id)))
+            elif actor.type == 'atlassian-user-role-actor':
+                users.append(actor)
+
+        users = [u if isinstance(u, dict) else u.__dict__ for u in users]
+        for u in users:
+            u['accountId'] = u['id']
+        return users
 
     # non-resource
     @translate_resource_args
@@ -2345,13 +2388,7 @@ class JIRA(object):
         _rolesdict = self._get_json(path)
         rolesdict = {}
 
-        for k, v in _rolesdict.items():
-            tmp = {}
-            tmp['id'] = v.split("/")[-1]
-            tmp['url'] = v
-            rolesdict[k] = tmp
-        return rolesdict
-        # TODO(ssbarnea): return a list of Roles()
+        return [self.project_role(project, url.split("/")[-1]) for url in _rolesdict.values()]
 
     @translate_resource_args
     def project_role(self, project, id):
@@ -2950,20 +2987,19 @@ class JIRA(object):
         self._session.auth = (username, password)
         self._session.cert = self._options['client_cert']
 
-    def _create_oauth_session(self, oauth, timeout):
-        verify = self._options['verify']
+    def _create_oauth_session(self, oauth_info, timeout):
+        # verify = self._options['verify']
 
         from oauthlib.oauth1 import SIGNATURE_RSA
         from requests_oauthlib import OAuth1
-
         oauth = OAuth1(
-            oauth['consumer_key'],
-            rsa_key=oauth['key_cert'],
+            oauth_info['consumer_key'],
+            rsa_key=oauth_info['key_cert'],
             signature_method=SIGNATURE_RSA,
-            resource_owner_key=oauth['access_token'],
-            resource_owner_secret=oauth['access_token_secret'])
+            resource_owner_key=oauth_info['access_token'],
+            resource_owner_secret=oauth_info['access_token_secret'])
         self._session = ResilientSession(timeout)
-        self._session.verify = verify
+        self._session.verify = oauth_info['verifier']
         self._session.auth = oauth
 
     def _create_kerberos_session(self, timeout, kerberos_options=None):
@@ -3440,7 +3476,7 @@ class JIRA(object):
                     templates[t['name']] = t
         return templates
 
-    def create_project(self, key, name=None, assignee=None, type="Software", template_name=None):
+    def create_project(self, key, name=None, assignee=None, type='software', template_name=None):
         """Create a project with the specified parameters.
 
         :param key: Mandatory. Must match JIRA project key requirements, usually only 2-10 uppercase characters.
@@ -3480,26 +3516,25 @@ class JIRA(object):
 
         payload = {'name': name,
                    'key': key,
-                   'keyEdited': 'false',
+                   # 'keyEdited': 'false',
                    # 'projectTemplate': 'com.atlassian.jira-core-project-templates:jira-issuetracking',
                    # 'permissionScheme': '',
-                   'projectTemplateWebItemKey': template_key,
-                   'projectTemplateModuleKey': template_key,
+                   # 'projectTemplateWebItemKey': template_key,
+                   # 'projectTemplateModuleKey': template_key,
+                   'projectTemplateKey': template_key,
                    'lead': assignee,
                    # 'assigneeType': '2',
                    }
 
         if self._version[0] > 6:
             # JIRA versions before 7 will throw an error if we specify type parameter
-            payload['type'] = type
+            payload['projectTypeKey'] = type
 
-        headers = CaseInsensitiveDict(
-            {'Content-Type': 'application/x-www-form-urlencoded'})
-        url = self._options['server'] + '/rest/project-templates/latest/templates'
-
-        r = self._session.post(url, data=payload, headers=headers)
-
-        if r.status_code == 200:
+        # headers = CaseInsensitiveDict({'Content-Type': 'application/x-www-form-urlencoded'})
+        # url = self._options['server'] + '/rest/project-templates/latest/templates'
+        url = self._options['server'] + '/rest/api/2/project'
+        r = self._session.post(url, data=payload, headers=self._options['headers'])
+        if r.status_code in (200, 201):
             r_json = json_loads(r)
             return r_json
 
@@ -4279,18 +4314,9 @@ class JIRA3(JIRA):
         else:
             return []
 
-    def get_project_fields_by_issue_type(self, project_id):
+    def get_project_fields_by_issue_type(self, project_id, project_key=None):
         url = self.rest_url('issue/createmeta?expand=projects.issuetypes.fields')
-        projects = self._session.get(url).json()['projects']
-        for project in projects:
-            if str(project['id']) == str(project_id):
-                issue_types = {}
-                for itype in project['issuetypes']:
-                    name = itype['name']
-                    issue_types[name] = itype['fields']#.keys()
-                    # 'set' in field['operations'] or 'add' in field['operations']
-                return issue_types
-        return {}
+        return _parse_project_fields_by_issue_type(project_id, self._session.get(url).json())
 
     def create_issue(self, fields=None, prefetch=True, **fieldargs):
         data = _field_worker(fields, **fieldargs)
@@ -4441,10 +4467,6 @@ class JIRA3(JIRA):
         response = json_loads(self._session.get(self.rest_url('workflowscheme/project?projectId=%s' % project_id)))
         return response
 
-    def delete_issue(self, issue_id):
-        url = self._get_url('issue')
-        return self._session.delete('%s/%s' % (url, issue_id))
-
     def delete_issue_comment(self, issue_id, comment_id):
         url = self._get_url('issue')
         return self._session.delete('%s/%s/comment/%s' % (url, issue_id, comment_id))
@@ -4476,3 +4498,48 @@ class JIRA3(JIRA):
             else:
                 startAt += PER_PAGE
         return users
+
+
+def _parse_project_fields_by_issue_type(project_id, data):
+    projects = data['projects']
+    for project in projects:
+        if str(project['id']) == str(project_id):
+            issue_types = {}
+            for itype in project['issuetypes']:
+                name = itype['name']
+                fields = itype['fields']#.keys()
+                for val in fields.values():
+                    # Adds 'key', which is not returned from V2 api
+                    if 'key' not in 'val':
+                        # schema.system is like a normal string key of a system field, customId is for custo fields
+                        val['key'] = get_deep(val, 'schema.system') or str(get_deep(val, 'schema.customId', '')) or None
+
+                issue_types[name] = fields
+                # 'set' in field['operations'] or 'add' in field['operations']
+            return issue_types
+    return {}
+
+
+def get_deep(obj, paths, default=None):
+    ''' Gets nested value in object, no errors
+        thrown if any object in the path is None
+        ex: get_deep(obj, 'my.nested.property.here')
+    '''
+    val = obj
+    for prop in paths.split('.'):
+        if isinstance(val, dict):
+            val = val.get(prop, None)
+        elif isinstance(val, list) and int(prop) < len(val):
+            val = val[int(prop)]
+        else:
+            try:
+                val = getattr(val, prop, None)
+            except:
+                return None
+
+        if val is None:
+            break
+
+    if val is not None:
+        return val
+    return default
