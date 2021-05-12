@@ -2999,7 +2999,7 @@ class JIRA(object):
             resource_owner_key=oauth_info['access_token'],
             resource_owner_secret=oauth_info['access_token_secret'])
         self._session = ResilientSession(timeout)
-        self._session.verify = oauth_info['verifier']
+        self._session.verify = True  # oauth_info['verifier']
         self._session.auth = oauth
 
     def _create_kerberos_session(self, timeout, kerberos_options=None):
