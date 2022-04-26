@@ -1536,14 +1536,19 @@ class JIRA(object):
         return True
 
     @translate_resource_args
-    def comments(self, issue):
+    def comments(self, issue, rendered_body=False):
         """Get a list of comment Resources.
 
         :param issue: the issue to get comments from
         :type issue: str
         :rtype: List[Comment]
         """
-        r_json = self._get_json('issue/' + str(issue) + '/comment')
+
+        params = None
+        if rendered_body:
+            params = dict(expand='renderedBody')
+
+        r_json = self._get_json('issue/' + str(issue) + '/comment', params=params)
 
         comments = [Comment(self._options, self._session, raw_comment_json)
                     for raw_comment_json in r_json['comments']]
@@ -3087,6 +3092,7 @@ class JIRA(object):
         """
         url = self._get_url(path, base)
         r = self._session.get(url, params=params)
+        # print("url:", url)
         try:
             r_json = json_loads(r)
         except ValueError as e:
