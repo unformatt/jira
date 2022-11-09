@@ -4099,10 +4099,17 @@ class JIRA3(JIRA):
         JIRA.__init__(self, **kwargs)
 
     def projects(self, startAt=0, maxResults=False):
-        return self._fetch_pages(Board, 'values', 'project/search', startAt, maxResults, {})
+        return self._fetch_pages(Project, 'values', 'project/search', startAt, maxResults, {})
 
     def labels(self, startAt=0, maxResults=False):
         return self._fetch_pages(Resource, 'values', 'field/AT2__labels/option', startAt, maxResults, {})
+
+    def boards(self, startAt=0, maxResults=False):
+        orig_rest_path = self._options['agile_rest_path']
+        self._options['agile_rest_path'] = 'agile'
+        boards = super(JIRA3, self).boards(startAt, maxResults)
+        self._options['agile_rest_path'] = orig_rest_path
+        return boards
 
     @staticmethod
     def refresh_token(client_id, client_secret, refresh_token):
