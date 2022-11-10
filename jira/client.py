@@ -4111,6 +4111,13 @@ class JIRA3(JIRA):
         self._options['agile_rest_path'] = orig_rest_path
         return boards
 
+    def board_configuration(self, board_id):
+        orig_rest_path = self._options['agile_rest_path']
+        self._options['agile_rest_path'] = 'agile'
+        r_json = self._get_json('board/%s/configuration' % board_id, base=self.AGILE_BASE_URL)
+        self._options['agile_rest_path'] = orig_rest_path
+        return r_json
+
     @staticmethod
     def refresh_token(client_id, client_secret, refresh_token):
         response = requests.post(
