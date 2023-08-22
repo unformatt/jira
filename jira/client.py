@@ -4452,6 +4452,16 @@ class JIRA3(JIRA):
         comment = Comment(self._options, self._session, raw=json_loads(r))
         return comment
 
+    @translate_resource_args
+    def update_comment(self, issueId, commentId, body):
+        data = {'body': body}
+        url = self._get_url('issue/' + issueId + '/comment/' + commentId)
+        r = self._session.put(
+            url, data=json.dumps(data), headers={'Content-Type': 'application/json'}
+        )
+        comment = Comment(self._options, self._session, raw=json_loads(r))
+        return comment
+
     def add_web_link(self, issue, title, url, icon_url=None):
         """
         https://developer.atlassian.com/cloud/jira/platform/rest/v3/#api-rest-api-3-issue-issueIdOrKey-remotelink-post
