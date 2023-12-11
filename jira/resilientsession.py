@@ -78,7 +78,7 @@ class ResilientSession(Session):
         super(ResilientSession, self).__init__()
 
         # Indicate our preference for JSON to avoid https://bitbucket.org/bspeakmon/jira-python/issue/46 and https://jira.atlassian.com/browse/JRA-38551
-        self.headers.update({"Accept": "application/json,*.*;q=0.9"})
+        self.headers.update({"Accept": "application/json,*/*;q=0.9"})
 
     def __recoverable(self, response, url, request, counter=1):
         msg = response
