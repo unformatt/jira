@@ -395,6 +395,15 @@ class Resource(object):
 
         :type raw: Dict[str, Any]
         """
+
+        # Atlassian breaking things again: https://community.atlassian.com/t5/Jira-Software-questions/Jira-Ticket-API-returning-invalid-quot-self-quot-URL-returns-404/qaq-p/2590603#M916081
+        # Doesn't seem to happen with tickets that come from search but from JIRA.issue()
+        if isinstance(self, Issue):
+            # self URL should have context_path in it! Check if it's missing.
+            if self._options.get('context_path') and self._options.get('context_path') not in raw['self']:
+                self_url = self._get_url('issue/%s' % raw['id'])
+                raw['self'] = self_url
+
         self.raw = raw
         if not raw:
             raise NotImplementedError("We cannot instantiate empty resources: %s" % raw)
