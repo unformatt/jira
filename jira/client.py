@@ -4411,11 +4411,11 @@ class JIRA3(JIRA):
             }
         return desc
 
-    def get_jira_instance_info(self):
-        # PROBLEM: If user grants access to more than one site. We're just looking at the first one!
+    def get_jira_instance_info(self, cloud_instance_id):
         resources = self.get_accessible_resources()
-        if resources:
-            return resources[0]
+        for resource in resources:
+            if resource['id'] == cloud_instance_id:
+                return resource
 
     @lru_cache()
     def get_accessible_resources(self):
