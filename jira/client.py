@@ -4411,9 +4411,11 @@ class JIRA3(JIRA):
             }
         return desc
 
-    def get_jira_instance_info(self, cloud_instance_id):
+    def get_jira_instance_info(self, cloud_instance_id=None):
         resources = self.get_accessible_resources()
         for resource in resources:
+            if cloud_instance_id is None:
+                return resource
             if resource['id'] == cloud_instance_id:
                 return resource
 
