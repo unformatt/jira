@@ -111,10 +111,18 @@ class ResilientSession(Session):
 
         import logging
 
+        # Atlassian's CloudFront config doesn't allow data in GET body
+        # https://developer.atlassian.com/changelog/#CHANGE-2328
+        if verb.lower() == 'get':
+            kwargs['data'] = None
+
+        data = kwargs.get('data')
         # if we pass a dictionary as the 'data' we assume we want to send json
-        data = kwargs.get('data', {})
         if isinstance(data, dict):
             kwargs['data'] = json.dumps(data)
+
+        if verb.lower() == 'delete':
+            kwargs['headers']['Accept'] = None
 
         # DEBUG
         # headers_copy = dict(**kwargs['headers'])
@@ -124,8 +132,6 @@ class ResilientSession(Session):
         # print '   headers:', headers_copy
         # print '   data:', data
 
-        if verb.lower() == 'delete':
-            kwargs['headers']['Accept'] = None
         retry_number = 0
         while retry_number <= self.max_retries:
             response = None
