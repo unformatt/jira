@@ -97,6 +97,11 @@ from collections import OrderedDict
 from six import integer_types
 from six import string_types
 
+if sys.version_info.major >= 3:
+    urlencode = urllib.parse.urlencode
+else:
+    urlencode = urllib.urlencode
+
 # six.moves does not play well with pyinstaller, see https://github.com/pycontribs/jira/issues/38
 try:
     # noinspection PyUnresolvedReferences
@@ -4629,9 +4634,28 @@ class JIRA3(JIRA):
         else:
             return []
 
-    def get_project_fields_by_issue_type(self, project_id, project_key=None):
+    def get_project_fields_by_issue_type(self, project_id, project_key=None, issue_type_id=None):
         url = self.rest_url('issue/createmeta?expand=projects.issuetypes.fields')
-        return _parse_project_fields_by_issue_type(project_id, self._session.get(url).json())
+        params = {
+            'expand': 'projects.issuetypes.fields',
+        }
+
+        # Prefer ID if you have it (you do). Key is a fallback.
+        if project_id is not None:
+            params['projectIds'] = project_id
+        elif project_key:
+            params['projectKeys'] = project_key
+
+        # Optional but strongly recommended: narrows payload drastically
+        if issue_type_id:
+            params['issuetypeIds'] = issue_type_id
+
+        url = self.rest_url('issue/createmeta')
+
+        return _parse_project_fields_by_issue_type(
+            project_id,
+            self._session.get(url, params=params).json()
+        )
 
     def create_issue(self, fields=None, prefetch=True, **fieldargs):
         data = _field_worker(fields, **fieldargs)
