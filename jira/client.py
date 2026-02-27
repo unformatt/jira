@@ -97,11 +97,6 @@ from collections import OrderedDict
 from six import integer_types
 from six import string_types
 
-if sys.version_info.major >= 3:
-    urlencode = urllib.parse.urlencode
-else:
-    urlencode = urllib.urlencode
-
 # six.moves does not play well with pyinstaller, see https://github.com/pycontribs/jira/issues/38
 try:
     # noinspection PyUnresolvedReferences
